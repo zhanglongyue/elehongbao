@@ -40,6 +40,8 @@ def infoPrint(response, count, lucky_num, sn):
     [msg.append({i['sns_username']: i['amount']}) for i in response['promotion_records']]
     print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), threading.currentThread().name,
           "监控数%d 红包%s 进度%d/%d 信息%s" % (len(hongbao), sn, count, lucky_num, str(msg)))
+    itchat.send(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), threading.currentThread().name,
+          "监控数%d 红包%s 进度%d/%d 信息%s" % (len(hongbao), sn, count, lucky_num, str(msg)), toUserName="filehelper")
 
 # 查询红包进度，默认会领取红包，该方法将使用微信小号cookie
 def hognbaoQuery(lucky_num, sn):
@@ -53,6 +55,7 @@ def hognbaoQuery(lucky_num, sn):
         count = len(jsons['promotion_records'])
         if getUser['nickname'] in str(jsons):
             print("这个红包你已经抢过了")
+            itchat.send("这个红包你已经抢过了", toUserName="filehelper")
             infoPrint(jsons, count, lucky_num, sn)
             hongbao.remove(sn)
             break
@@ -65,10 +68,12 @@ def hognbaoQuery(lucky_num, sn):
                 hongbaoGet(lucky_num, sn)
                 hongbao.remove(sn)
                 print("获得大红包!")
+                itchat.send("获得大红包!", toUserName="filehelper")
                 break
             elif count >= lucky_num:
                 hongbao.remove(sn)
                 print("最佳红包已被领取!")
+                itchat.send("最佳红包已被领取!", toUserName="filehelper")
                 break
             elif count < lucky_num:
                 session.close()
@@ -97,8 +102,10 @@ def hongbaoFinder(msg):
             requests = threadpool.makeRequests(hognbaoQuery, [([lucky_num, sn], None)])
             [pool.putRequest(req) for req in requests]
             print("收到饿了么红包 幸运位%d 红包ID %s" % (lucky_num, sn))
+            itchat.send("收到饿了么红包 幸运位%d 红包ID %s" % (lucky_num, sn), toUserName="filehelper")
         else:
             print("已经在监控该红包 幸运位%d 红包ID %s" % (lucky_num, sn))
+            itchat.send("已经在监控该红包 幸运位%d 红包ID %s" % (lucky_num, sn), toUserName="filehelper")
 
 
 @itchat.msg_register([TEXT, MAP, CARD, NOTE, SHARING])
@@ -127,5 +134,5 @@ if __name__ == '__main__':
     getUser = initUser('getUser')
 
     hongbao = set([])
-    itchat.auto_login(True)
+    itchat.auto_login(hotReload=True,enableCmdQR=False)
     itchat.run(True)
