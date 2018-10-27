@@ -40,8 +40,6 @@ def infoPrint(response, count, lucky_num, sn):
     [msg.append({i['sns_username']: i['amount']}) for i in response['promotion_records']]
     print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), threading.currentThread().name,
           "监控数%d 红包%s 进度%d/%d 信息%s" % (len(hongbao), sn, count, lucky_num, str(msg)))
-    itchat.send(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), threading.currentThread().name,
-          "监控数%d 红包%s 进度%d/%d 信息%s" % (len(hongbao), sn, count, lucky_num, str(msg)), toUserName="filehelper")
 
 # 查询红包进度，默认会领取红包，该方法将使用微信小号cookie
 def hognbaoQuery(lucky_num, sn):
@@ -54,8 +52,8 @@ def hognbaoQuery(lucky_num, sn):
         jsons = json.loads(content)
         count = len(jsons['promotion_records'])
         if getUser['nickname'] in str(jsons):
-            print("这个红包你已经抢过了")
-            itchat.send("这个红包你已经抢过了", toUserName="filehelper")
+            print("这个红包你已经抢过了!")
+            itchat.send("这个红包你已经抢过了!", toUserName="filehelper")
             infoPrint(jsons, count, lucky_num, sn)
             hongbao.remove(sn)
             break
