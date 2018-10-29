@@ -3,117 +3,135 @@ import datetime
 import json
 import re
 import threading
+import traceback
 from urllib.parse import unquote
 import itchat, time
 import os
 import requests
+import sys
 import threadpool
 from itchat.content import *
 
 
-def initUser(configName):
-    user = {}
-    user['nickname'] = conf.get(configName, 'nickname')
-    user['cookies'] = {}
-    UserCookies = conf.get(configName, 'cookies').replace(' ', '')
-    for cookie in UserCookies.split(';'):
-        kv = cookie.split('=')
-        user['cookies'][kv[0]] = kv[1]
-        if 'snsInfo' in kv[0]:
-            user['sign'] = re.findall('(?<=eleme_key%22%3A%22).+?(?=%22%2C%22)', kv[1])[0]
-            user['openid'] = re.findall('(?<=openid%22%3A%22).+?(?=%22%2C%22)', kv[1])[0]
-            user['unionid'] = re.findall('(?<=unionid%22%3A%22).+?(?=%22%2C%22)', kv[1])[0]
-            user['weixin_avatar'] = unquote(re.findall('(?<=headimgurl%22%3A%22).+?(?=%22%2C%22)', kv[1])[0])
-            requestData(user)
-    return user
+class User:
+    def __init__(self, type: str) -> None:
+        super().__init__()
+        self.cookies = {}
+        self.nick_name = conf.get(type, 'nickname')
+        user_cookies = conf.get(type, 'cookies').replace(' ', '')
+        for cookie in user_cookies.split(';'):
+            cookie_split = cookie.split('=')
+            cookie_key = cookie_split[0]
+            cookie_val = cookie_split[1]
+            self.cookies[cookie_key] = cookie_val
+            if 'snsInfo' in cookie_key:
+                self.sign = re.findall('(?<=eleme_key%22%3A%22).+?(?=%22%2C%22)', cookie_val)[0]
+                self.openid = re.findall('(?<=openid%22%3A%22).+?(?=%22%2C%22)', cookie_val)[0]
+                self.unionid = re.findall('(?<=unionid%22%3A%22).+?(?=%22%2C%22)', cookie_val)[0]
+                self.weixin_avatar = unquote(re.findall('(?<=headimgurl%22%3A%22).+?(?=%22%2C%22)', cookie_val)[0])
 
 
-def requestData(user):
-    user['data'] = '{"method": "phone", "group_sn":"%s", ' + '"sign": "%s", "phone": "",' \
-                    '"device_id": "", "hardware_id": "", "platform": 0, "track_id": "undefined",' \
-                    '"weixin_avatar": "%s","weixin_username": "%s", "unionid": "%s"}' \
-                     % (user['sign'], user['weixin_avatar'], user['nickname'], user['unionid'])
+class HongBao:
+    def __init__(self, lucky_num, sn) -> None:
+        super().__init__()
+        self.lucky_num = lucky_num
+        self.sn = sn
+        self.count = 0
 
-# 打印红包信息
-def infoPrint(response, count, lucky_num, sn):
-    msg = []
-    [msg.append({i['sns_username']: i['amount']}) for i in response['promotion_records']]
-    print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), threading.currentThread().name,
-          "监控数%d 红包%s 进度%d/%d 信息%s" % (len(hongbao), sn, count, lucky_num, str(msg)))
+    def update(self, json):
+        self.json = json
+        self.count = len(json['promotion_records'])
 
-# 查询红包进度，默认会领取红包，该方法将使用微信小号cookie
-def hognbaoQuery(lucky_num, sn):
-    hongbao.add(sn)
-    session = requests.session()
-    while 1:
-        content = session.post('https://h5.ele.me/restapi/marketing/promotion/weixin/%s' % (queryUser['openid']),
-                               cookies=queryUser['cookies'], data=queryUser['data'] % (sn)).content
-        content = str(content, "utf-8")
-        jsons = json.loads(content)
-        count = len(jsons['promotion_records'])
-        if getUser['nickname'] in str(jsons):
-            print("这个红包你已经抢过了!")
-            itchat.send("这个红包你已经抢过了!", toUserName="filehelper")
-            infoPrint(jsons, count, lucky_num, sn)
-            hongbao.remove(sn)
-            break
-        else:
-            infoPrint(jsons, count, lucky_num, sn)
+    def __format__(self) -> str:
+        msg = []
+        [msg.append({i['sns_username']: i['amount']}) for i in self.json['promotion_records']]
+        return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), threading.currentThread().name, \
+               "监控数%d 红包%s 进度%d/%d 信息%s" % (len(hongbao_array), self.sn, self.count, self.lucky_num, str(msg))
 
-            # 根据大红包进度做后续处理
-            if count == lucky_num - 1:
-                # 下一个是大红包！
-                hongbaoGet(lucky_num, sn)
-                hongbao.remove(sn)
-                print("获得大红包!")
-                itchat.send("获得大红包!", toUserName="filehelper")
+
+def hongbao_query(hongbao: HongBao):
+    try:
+        session = requests.session()
+        while True:
+            content = session.post('https://h5.ele.me/restapi/marketing/promotion/weixin/%s' % (query_user.openid),
+                                   cookies=query_user.cookies, data=request_data(query_user, hongbao)).content
+            content = str(content, "utf-8")
+            hongbao.update(json.loads(content))
+            if get_user.nick_name in str(hongbao.json):
+                prt_send("你已抢过该红包!", hongbao.__format__())
+                hongbao_array.remove(hongbao.sn)
                 break
-            elif count >= lucky_num:
-                hongbao.remove(sn)
-                print("最佳红包已被领取!")
-                itchat.send("最佳红包已被领取!", toUserName="filehelper")
-                break
-            elif count < lucky_num:
-                session.close()
-                time.sleep(SECONDS)
+            else:
+                print(hongbao.__format__())
+
+                # 根据大红包进度做后续处理
+                if hongbao.count == hongbao.lucky_num - 1:
+                    # 下一个是大红包！
+                    hongbao_get(hongbao)
+                    hongbao_array.remove(hongbao.sn)
+                    prt_send("获得大红包!", hongbao.__format__())
+                    break
+                elif hongbao.count >= hongbao.lucky_num:
+                    hongbao_array.remove(hongbao.sn)
+                    prt_send("最佳红包已被领取!")
+                    break
+                elif hongbao.count < hongbao.lucky_num:
+                    session.close()
+                    time.sleep(SECONDS)
+    except:
+        traceback.print_exc(file=sys.stdout)
 
 
 # 领取红包，该方法将使用需要获得大红包的用户cookie
-def hongbaoGet(lucky_num, sn):
+def hongbao_get(hongbao: HongBao):
     session = requests.session()
-    getUser['nickname'] = getUser['nickname'] + str(int(time.time()))
-    requestData(getUser)
-    content = session.post('https://h5.ele.me/restapi/marketing/promotion/weixin/%s' % (getUser['openid']),
-                           cookies=getUser['cookies'], data=getUser['data'] % (sn)).content
+    get_user['nickname'] = get_user['nickname'] + str(int(time.time()))
+    content = session.post('https://h5.ele.me/restapi/marketing/promotion/weixin/%s' % (get_user.openid),
+                           cookies=get_user.cookies, data=request_data(get_user, hongbao)).content
     content = str(content, "utf-8")
-    jsons = json.loads(content)
-    count = len(jsons['promotion_records'])
-    infoPrint(jsons, count, lucky_num, sn)
+    hongbao.update(json.loads(content))
+    print(hongbao.__format__())
     session.close()
 
 
-def hongbaoFinder(msg):
+def request_data(user, hongbao):
+    return '{"method": "phone", "group_sn":"%s", "sign": "%s", "phone": "",' \
+           '"device_id": "", "hardware_id": "", "platform": 0, "track_id": "undefined",' \
+           '"weixin_avatar": "%s","weixin_username": "%s", "unionid": "%s"}' \
+           % (hongbao.sn, user.sign, user.weixin_avatar, user.nick_name, user.unionid)
+
+
+def hongbao_finder(msg):
     if "饿了么" in str(msg) and "红包" in str(msg):
         lucky_num = int(re.findall('(?<=第).+?(?=个)', str(msg))[0])
         sn = re.findall('(?<=;sn=).+?(?=&amp;)', str(msg))[0]
-        if sn not in hongbao:
-            requests = threadpool.makeRequests(hognbaoQuery, [([lucky_num, sn], None)])
+        hongbao = HongBao(lucky_num, sn)
+        if sn not in hongbao_array:
+            hongbao_array.add(hongbao.sn)
+            requests = threadpool.makeRequests(hongbao_query, [([hongbao], None)])
             [pool.putRequest(req) for req in requests]
-            print("收到饿了么红包 幸运位%d 红包ID %s" % (lucky_num, sn))
-            itchat.send("收到饿了么红包 幸运位%d 红包ID %s" % (lucky_num, sn), toUserName="filehelper")
+            prt_send("收到饿了么红包 幸运位%d 红包ID %s" % (hongbao.lucky_num, hongbao.sn))
         else:
-            print("已经在监控该红包 幸运位%d 红包ID %s" % (lucky_num, sn))
-            itchat.send("已经在监控该红包 幸运位%d 红包ID %s" % (lucky_num, sn), toUserName="filehelper")
+            prt_send("已经在监控该红包 幸运位%d 红包ID %s" % (hongbao.lucky_num, hongbao.sn))
+
+
+def prt_send(msg, info=None):
+    if msg != None:
+        print(msg)
+        itchat.send(msg, toUserName="filehelper")
+    if info != None:
+        print(info)
+        itchat.send(str(info), toUserName="filehelper")
 
 
 @itchat.msg_register([TEXT, MAP, CARD, NOTE, SHARING])
 def text_reply(msg):
-    hongbaoFinder(msg)
+    hongbao_finder(msg)
 
 
 @itchat.msg_register([TEXT, MAP, CARD, NOTE, SHARING], isGroupChat=True)
 def text_reply(msg):
-    hongbaoFinder(msg)
+    hongbao_finder(msg)
 
 
 if __name__ == '__main__':
@@ -123,14 +141,14 @@ if __name__ == '__main__':
     conf.read(config_path, encoding="utf8")
 
     # 查询间隔时间
-    SECONDS = conf.getint('BaseConfig', 'seconds')
+    SECONDS = conf.getint('base', 'seconds')
     # 默认线程池大小50
     pool = threadpool.ThreadPool(50)
     # 初始化查询红包信息的用户数据
-    queryUser = initUser('queryUser')
+    query_user = User('query')
     # 初始化领取大红包的用户数据
-    getUser = initUser('getUser')
+    get_user = User('get')
 
-    hongbao = set([])
-    itchat.auto_login(hotReload=True,enableCmdQR=False)
+    hongbao_array = set([])
+    itchat.auto_login(hotReload=True, enableCmdQR=False)
     itchat.run(True)
