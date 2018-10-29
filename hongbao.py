@@ -73,7 +73,7 @@ def hongbao_query(hongbao: HongBao):
                     break
                 elif hongbao.count >= hongbao.lucky_num:
                     hongbao_array.remove(hongbao.sn)
-                    prt_send("最佳红包已被领取!")
+                    prt_send("最佳红包已被领取!", hongbao.__format__())
                     break
                 elif hongbao.count < hongbao.lucky_num:
                     session.close()
