@@ -89,7 +89,7 @@ def hongbao_query(hongbao: HongBao):
 # 领取红包，该方法将使用需要获得大红包的用户cookie
 def hongbao_get(hongbao: HongBao):
     session = requests.session()
-    get_user['nickname'] = get_user['nickname'] + str(int(time.time()))
+    get_user.nickname = get_user.nickname + str(int(time.time()))
     content = session.post('https://h5.ele.me/restapi/marketing/promotion/weixin/%s' % (get_user.openid),
                            cookies=get_user.cookies, data=request_data(get_user, hongbao)).content
     content = str(content, "utf-8")
