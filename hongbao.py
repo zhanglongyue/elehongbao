@@ -50,6 +50,7 @@ class HongBao:
 
 
 def hongbao_query(hongbao: HongBao):
+    global PRT_PROCESS
     try:
         session = requests.session()
         while True:
@@ -62,7 +63,10 @@ def hongbao_query(hongbao: HongBao):
                 hongbao_array.remove(hongbao.sn)
                 break
             else:
-                print(hongbao.__format__())
+                if PRT_PROCESS:
+                    prt_send(hongbao.__format__())
+                else:
+                    print(hongbao.__format__())
 
                 # 根据大红包进度做后续处理
                 if hongbao.count == hongbao.lucky_num - 1:
@@ -102,23 +106,30 @@ def request_data(user, hongbao):
 
 
 def hongbao_finder(msg):
+    global PRT_PROCESS
     if "饿了么" in str(msg) and "红包" in str(msg):
-        lucky_num = int(re.findall('(?<=第).+?(?=个)', str(msg))[0])
-        sn = re.findall('(?<=;sn=).+?(?=&amp;)', str(msg))[0]
-        hongbao = HongBao(lucky_num, sn)
-        if sn not in hongbao_array:
-            hongbao_array.add(hongbao.sn)
-            requests = threadpool.makeRequests(hongbao_query, [([hongbao], None)])
-            [pool.putRequest(req) for req in requests]
-            prt_send("收到饿了么红包 幸运位%d 红包ID %s" % (hongbao.lucky_num, hongbao.sn))
-        else:
-            prt_send("已经在监控该红包 幸运位%d 红包ID %s" % (hongbao.lucky_num, hongbao.sn))
+        try:
+            lucky_num = int(re.findall('(?<=第).+?(?=个)', str(msg))[0])
+            sn = re.findall('(?<=;sn=).+?(?=&amp;)', str(msg))[0]
+            hongbao = HongBao(lucky_num, sn)
+            if sn not in hongbao_array:
+                hongbao_array.add(hongbao.sn)
+                requests = threadpool.makeRequests(hongbao_query, [([hongbao], None)])
+                [pool.putRequest(req) for req in requests]
+                prt_send("收到饿了么红包 幸运位%d 红包ID %s" % (hongbao.lucky_num, hongbao.sn))
+            else:
+                prt_send("已经在监控该红包 幸运位%d 红包ID %s" % (hongbao.lucky_num, hongbao.sn))
+        except:
+            prt_send("不是正确的饿了么拼手气红包!")
+            traceback.print_exc(file=sys.stdout)
 
+    if "ele进度" in str(msg):
+        PRT_PROCESS = not PRT_PROCESS
 
 def prt_send(msg, info=None):
     if msg != None:
         print(msg)
-        itchat.send(msg, toUserName="filehelper")
+        itchat.send(str(msg), toUserName="filehelper")
     if info != None:
         print(info)
         itchat.send(str(info), toUserName="filehelper")
@@ -140,6 +151,8 @@ if __name__ == '__main__':
     conf = configparser.RawConfigParser()
     conf.read(config_path, encoding="utf8")
 
+    # 微信是否打印进度
+    PRT_PROCESS = True
     # 查询间隔时间
     SECONDS = conf.getint('base', 'seconds')
     # 默认线程池大小50
