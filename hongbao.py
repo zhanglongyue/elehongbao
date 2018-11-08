@@ -1,6 +1,7 @@
 import configparser
 import datetime
 import json
+import logging
 import re
 import threading
 import traceback
@@ -12,12 +13,16 @@ import sys
 import threadpool
 from itchat.content import *
 
+LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+DATE_FORMAT = "%m/%d/%Y %H:%M:%S %p"
+logging.basicConfig(filename='hongbao.log', level=logging.DEBUG, format=LOG_FORMAT, datefmt=DATE_FORMAT)
+
 
 class User:
     def __init__(self, type: str) -> None:
         super().__init__()
         self.cookies = {}
-        self.nick_name = conf.get(type, 'nickname')
+        self.nick_name = conf.get(type, 'nickname') + str(int(time.time()))
         user_cookies = conf.get(type, 'cookies').replace(' ', '')
         for cookie in user_cookies.split(';'):
             cookie_split = cookie.split('=')
@@ -40,11 +45,17 @@ class HongBao:
 
     def update(self, json):
         self.json = json
-        self.count = len(json['promotion_records'])
+        try:
+            self.count = len(json['promotion_records'])
+        except Exception as e:
+            logging.error(str(e))
 
     def __format__(self) -> str:
-        msg = []
-        [msg.append({i['sns_username']: i['amount']}) for i in self.json['promotion_records']]
+        try:
+            msg = []
+            [msg.append({i['sns_username']: i['amount']}) for i in self.json['promotion_records']]
+        except Exception as e:
+            logging.error(str(e))
         return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), threading.currentThread().name, \
                "监控数%d 红包%s 进度%d/%d 信息%s" % (len(hongbao_array), self.sn, self.count, self.lucky_num, str(msg))
 
@@ -82,19 +93,17 @@ def hongbao_query(hongbao: HongBao):
                 elif hongbao.count < hongbao.lucky_num:
                     session.close()
                     time.sleep(SECONDS)
-    except:
-        traceback.print_exc(file=sys.stdout)
+    except Exception as e:
+        logging.error(str(e))
 
 
 # 领取红包，该方法将使用需要获得大红包的用户cookie
 def hongbao_get(hongbao: HongBao):
     session = requests.session()
-    get_user.nickname = get_user.nickname + str(int(time.time()))
     content = session.post('https://h5.ele.me/restapi/marketing/promotion/weixin/%s' % (get_user.openid),
                            cookies=get_user.cookies, data=request_data(get_user, hongbao)).content
     content = str(content, "utf-8")
     hongbao.update(json.loads(content))
-    print(hongbao.__format__())
     session.close()
 
 
@@ -107,7 +116,7 @@ def request_data(user, hongbao):
 
 def hongbao_finder(msg):
     global PRT_PROCESS
-    if "饿了么" in str(msg) and "红包" in str(msg):
+    if "饿了么拼手气" in str(msg) and msg.Type == 'Sharing':
         try:
             lucky_num = int(re.findall('(?<=第).+?(?=个)', str(msg))[0])
             sn = re.findall('(?<=;sn=).+?(?=&amp;)', str(msg))[0]
@@ -119,9 +128,9 @@ def hongbao_finder(msg):
                 prt_send("收到饿了么红包 幸运位%d 红包ID %s" % (hongbao.lucky_num, hongbao.sn))
             else:
                 prt_send("已经在监控该红包 幸运位%d 红包ID %s" % (hongbao.lucky_num, hongbao.sn))
-        except:
+        except Exception as e:
             prt_send("不是正确的饿了么拼手气红包!")
-            traceback.print_exc(file=sys.stdout)
+            logging.error(str(e))
 
     if "ele进度" in str(msg):
         PRT_PROCESS = not PRT_PROCESS
@@ -146,22 +155,25 @@ def text_reply(msg):
 
 
 if __name__ == '__main__':
-    cur_path = os.path.dirname(os.path.realpath(__file__))
-    config_path = os.path.join(cur_path, 'config.ini')
-    conf = configparser.RawConfigParser()
-    conf.read(config_path, encoding="utf8")
+    try:
+        cur_path = os.path.dirname(os.path.realpath(__file__))
+        config_path = os.path.join(cur_path, 'config.ini')
+        conf = configparser.RawConfigParser()
+        conf.read(config_path, encoding="utf8")
 
-    # 微信是否打印进度
-    PRT_PROCESS = True
-    # 查询间隔时间
-    SECONDS = conf.getint('base', 'seconds')
-    # 默认线程池大小50
-    pool = threadpool.ThreadPool(50)
-    # 初始化查询红包信息的用户数据
-    query_user = User('query')
-    # 初始化领取大红包的用户数据
-    get_user = User('get')
+        # 微信是否打印进度
+        PRT_PROCESS = True
+        # 查询间隔时间
+        SECONDS = conf.getint('base', 'seconds')
+        # 默认线程池大小50
+        pool = threadpool.ThreadPool(50)
+        # 初始化查询红包信息的用户数据
+        query_user = User('query')
+        # 初始化领取大红包的用户数据
+        get_user = User('get')
 
-    hongbao_array = set([])
-    itchat.auto_login(hotReload=True, enableCmdQR=False)
-    itchat.run(True)
+        hongbao_array = set([])
+        itchat.auto_login(hotReload=True, enableCmdQR=False)
+        itchat.run(True)
+    except Exception as e:
+        logging.error(str(e))
