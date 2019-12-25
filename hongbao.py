@@ -2,20 +2,22 @@ import configparser
 import datetime
 import json
 import logging
+import os
 import re
 import threading
-import traceback
+import time
+from logging.handlers import RotatingFileHandler
 from urllib.parse import unquote
-import itchat, time
-import os
+import itchat
 import requests
-import sys
-import threadpool
+import threadpool as threadpool
 from itchat.content import *
 
-LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
-DATE_FORMAT = "%m/%d/%Y %H:%M:%S %p"
-logging.basicConfig(filename='hongbao.log', level=logging.DEBUG, format=LOG_FORMAT, datefmt=DATE_FORMAT)
+Rthandler = RotatingFileHandler('hongbao.log', maxBytes=50 * 1024 * 1024, backupCount=1)
+Rthandler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', '%m/%d/%Y %H:%M:%S %p')
+Rthandler.setFormatter(formatter)
+logging.getLogger('').addHandler(Rthandler)
 
 
 class User:
@@ -45,23 +47,24 @@ class HongBao:
 
     def update(self, json):
         self.json = json
+        print(json)
         try:
             self.count = len(json['promotion_records'])
         except Exception as e:
-            logging.error(str(e))
+            logging.error('promotion_records count' + str(e))
 
     def __format__(self) -> str:
         try:
             msg = []
             [msg.append({i['sns_username']: i['amount']}) for i in self.json['promotion_records']]
         except Exception as e:
-            logging.error(str(e))
+            logging.error('promotion_records msg create' + str(e))
         return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), threading.currentThread().name, \
                "监控数%d 红包%s 进度%d/%d 信息%s" % (len(hongbao_array), self.sn, self.count, self.lucky_num, str(msg))
 
 
 def hongbao_query(hongbao: HongBao):
-    global PRT_PROCESS
+    global prt_process
     try:
         session = requests.session()
         while True:
@@ -74,7 +77,7 @@ def hongbao_query(hongbao: HongBao):
                 hongbao_array.remove(hongbao.sn)
                 break
             else:
-                if PRT_PROCESS:
+                if prt_process:
                     prt_send(hongbao.__format__())
                 else:
                     print(hongbao.__format__())
@@ -110,12 +113,12 @@ def hongbao_get(hongbao: HongBao):
 def request_data(user, hongbao):
     return '{"method": "phone", "group_sn":"%s", "sign": "%s", "phone": "",' \
            '"device_id": "", "hardware_id": "", "platform": 0, "track_id": "undefined",' \
-           '"weixin_avatar": "%s","weixin_username": "%s", "unionid": "%s"}' \
+           '"weixin_avatar": "%s","weixin_username": "%s", "unionid": "%s","latitude":"","longitude":""}' \
            % (hongbao.sn, user.sign, user.weixin_avatar, user.nick_name, user.unionid)
 
 
 def hongbao_finder(msg):
-    global PRT_PROCESS
+    global prt_process
     if "饿了么拼手气" in str(msg) and msg.Type == 'Sharing':
         try:
             lucky_num = int(re.findall('(?<=第).+?(?=个)', str(msg))[0])
@@ -133,7 +136,8 @@ def hongbao_finder(msg):
             logging.error(str(e))
 
     if "ele进度" in str(msg):
-        PRT_PROCESS = not PRT_PROCESS
+        prt_process = not prt_process
+
 
 def prt_send(msg, info=None):
     if msg != None:
@@ -162,7 +166,7 @@ if __name__ == '__main__':
         conf.read(config_path, encoding="utf8")
 
         # 微信是否打印进度
-        PRT_PROCESS = True
+        prt_process = True
         # 查询间隔时间
         SECONDS = conf.getint('base', 'seconds')
         # 默认线程池大小50
